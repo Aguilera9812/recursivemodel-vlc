@@ -30,7 +30,7 @@ e = {reflectance,scale_factor,size_room,k_reflections}
 e = [0.8,1/71,[2,2,2],1]
 ```
 
-The previus values for source, receiver and environment are the default values. Using this set of parameters, the script compute the channel impulse response based on the follow functions:
+The previous values for source, receiver and environment are the default values. Using this set of parameters, the script compute the channel impulse response based on the follow functions:
 
 ```python
 # The tessellation function calculates the coordinates of every points in the walls discretization, and returns the array_points.
