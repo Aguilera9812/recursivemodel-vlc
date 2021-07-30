@@ -8,7 +8,9 @@ Make sure have installed all libraries used in the python script.
 
 ## Usage
 
-This model uses a set of parameters to defines features of source, receiver and environment, as follows:
+To run this recursive model you only need run the main_model.py.  
+
+This model uses a set of parameters to define features of source, receiver and environment, as follows:
 
 ```python
 
@@ -28,7 +30,7 @@ e = {reflectance,scale_factor,size_room,k_reflections}
 e = [0.8,1/71,[2,2,2],1]
 ```
 
-Using this set of parameters, the script compute the channel impulse response based on the follow functions:
+The previus values for source, receiver and environment are the default values. Using this set of parameters, the script compute the channel impulse response based on the follow functions:
 
 ```python
 # The tessellation function calculates the coordinates of every points in the walls discretization, and returns the array_points.
