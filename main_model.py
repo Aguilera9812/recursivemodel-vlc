@@ -13,6 +13,7 @@ This software includes the following improvements:
 import numpy as np
 import numpy
 import math
+import os
 
 
 import matplotlib.pyplot as plt
@@ -36,8 +37,11 @@ bins = 300 # bins for power graph
 #Array with normal vectors for each wall.
 ew_n = [[0,0,-1],[0,1,0],[1,0,0],[0,-1,0],[-1,0,0],[0,0,1]]
 
-cir_path = '/home/juanpc/python_envs/recursivemodel-vlc/cir/'
-report_path = '/home/juanpc/python_envs/recursivemodel-vlc/report/'
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+cir_path = ROOT_DIR + "/cir/"
+report_path = ROOT_DIR + "/report/"
+
 
 #Function to calculate angls between two vector position
 def cos_2points(v1,n1,v2,n2):
@@ -234,7 +238,7 @@ def make_parameters(array_points,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick):
 # x_lim,y_lim,z_lim: limits in room dimmensions
 # a_r: sensitive area in photodetector
 # no_xtick,no_ytick,no_ztick: number of division in each axes.
-def h_t(m,tx_pos,rx_pos,points,parameters,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick,init_index,a_r,rho,delta_A,k_reflec):
+def h_t(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick,init_index,a_r,rho,delta_A,k_reflec):
     
     #tx_wall_power = np.zeros(3,2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick)
     #rx_wall_power = np.zeros(3,2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick)
@@ -243,34 +247,13 @@ def h_t(m,tx_pos,rx_pos,points,parameters,x_lim,y_lim,z_lim,no_xtick,no_ytick,no
 
     area_factor = (2*x_lim*y_lim + 2*x_lim*z_lim + 2*y_lim*z_lim)/(delta_A*no_cells)
 
-
     #define the wall of the tx_pos
-    if tx_pos[0]==0:
-        tx_wall = 2
-    elif tx_pos[0]==x_lim:    
-        tx_wall = 4
-    elif tx_pos[1]==0:    
-        tx_wall = 1
-    elif tx_pos[1]==y_lim:    
-        tx_wall = 3
-    elif tx_pos[2]==0:    
-        tx_wall = 5
-    elif tx_pos[2]==z_lim:    
-        tx_wall = 0
+    tx_wall = wall_label[tx_pos]
+    
 
     #define the wall of the rx_pos
-    if rx_pos[0]==0:
-        rx_wall = 2
-    elif rx_pos[0]==x_lim:    
-        rx_wall = 4
-    elif rx_pos[1]==0:    
-        rx_wall = 1
-    elif rx_pos[1]==y_lim:    
-        rx_wall = 3
-    elif rx_pos[2]==0:    
-        rx_wall = 5
-    elif rx_pos[2]==z_lim:    
-        rx_wall = 0
+    rx_wall = wall_label[rx_pos]
+    
 
     for i in range(0,no_cells):
         #print(np.transpose(tx_pos)-points[tx_wall][:,i])        
@@ -409,7 +392,7 @@ def create_report(h_k,k_reflec,no_cells):
         for j in range(no_cells**i):
            power_data[int(hk_aux[i][j,1]),i] += hk_aux[i][j,0]
 
-        
+                
         time_scale = linspace(0,bins*tres,num=bins)
 
         fig, (vax) = plt.subplots(1, 1, figsize=(12, 6))
@@ -422,11 +405,14 @@ def create_report(h_k,k_reflec,no_cells):
 
         vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
 
-        fig.savefig(report_path+"h"+str(i)+".png")
+        print("//-------- h"+str(i)+"-histogram-saved -------------//")            
+        numpy.savetxt(report_path+"h"+str(i)+"-histogram.csv", np.transpose([power_data[:,i],time_scale.T]), delimiter=",") 
 
+        fig.savefig(report_path+"h"+str(i)+".png")
+        print("Graphs created and saved in directory.")
         plt.show()
 
-    print("Graphs created and saved in directory.")
+    
     print("Total-Response:")
     print("Total-Power[W]:"+str(sum(h_power)))
 
@@ -450,7 +436,7 @@ starttime = timeit.default_timer()
 
 a = tessellation(e[2][0],e[2][1],e[2][2],e[1])
 b = make_parameters(a[0],e[2][0],e[2][1],e[2][2],a[1],a[2],a[3])
-c = h_t(s[2],s[0],r[0],a[0][0:3,:],b,e[2][0],e[2][1],e[2][2],a[1],a[2],a[3],a[4],r[2],e[0],a[5],e[3])
+c = h_t(s[2],s[0],r[0],a[0][0:3,:],a[0][3,:],b,e[2][0],e[2][1],e[2][2],a[1],a[2],a[3],a[4],r[2],e[0],a[5],e[3])
 create_report(c,e[3],a[6])
 
 print("The execution time is :", timeit.default_timer() - starttime)
