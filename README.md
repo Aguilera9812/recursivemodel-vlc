@@ -4,7 +4,7 @@ The RecursiveModel-VLC is an script to compute the channel impulse response of o
 
 ## Installation
 
-Make sure have installed all libraries used in the python script.
+Make sure have installed all libraries used in the python script. Once the script execution has finished, the power and delay for every ray  are in 'cir' folder as .csv files. In the 'report' folder are the graph of the channel impulse response for every reflection. 
 
 ## Usage
 
