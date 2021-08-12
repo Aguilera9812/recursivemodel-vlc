@@ -109,8 +109,8 @@ def tessellation(x_lim,y_lim,z_lim,scale_factor):
     #DeltaA is defined from time-clearesolution presented in main reference.
     #delta_A = 3.6e-3
     
-    #DeltaA defined to fulfill deltaA << (root(2)/2)*deltaL
-    delta_A = (2**0.5)*delta_L/(2*100)
+    #DeltaA defined to fulfill deltaA << (root(2)/2)*deltaL --> the maximun lenght on delta_A must be 10 times less than distane between points 
+    delta_A = (delta_L**2)/800
 
     print("Scale factor for Delta L is: ", scale_factor)
     print("DeltaL[m]: ", delta_L)
@@ -409,13 +409,30 @@ def create_report(h_k,k_reflec,no_cells):
         numpy.savetxt(report_path+"h"+str(i)+"-histogram.csv", np.transpose([power_data[:,i],time_scale.T]), delimiter=",") 
 
         fig.savefig(report_path+"h"+str(i)+".png")
-        print("Graphs created and saved in directory.")
+        print("Graph created and saved in directory.")
         plt.show()
 
     
     print("Total-Response:")
-    print("Total-Power[W]:"+str(sum(h_power)))
+    print("Total-Power[W]:"+str(sum(h_power)))    
+    print("//---------- total-histogram-saved -------------//")            
+    numpy.savetxt(report_path+"total-histogram.csv", np.transpose([np.sum(power_data,axis=1),time_scale.T]), delimiter=",") 
 
+    fig, (vax) = plt.subplots(1, 1, figsize=(12, 6))
+    vax.plot(time_scale,np.sum(power_data,axis=1), 'o',markersize=2)
+    vax.vlines(time_scale, [0], np.sum(power_data,axis=1),linewidth=1)
+
+    vax.set_xlabel("time(s) \n Time resolution:"+str(tres)+"s  Bins:"+str(bins),fontsize=15)
+    vax.set_ylabel('Power(W)',fontsize=15)
+    vax.set_title("Total Channel Impulse Response",fontsize=20)
+
+    vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
+
+    fig.savefig(report_path+"total-histogram.png")
+    print("Graph created and saved in directory.")
+    plt.show()
+    
+    
     return 0
 
 ####### define input parameters for channel model ###########
