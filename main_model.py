@@ -8,6 +8,7 @@ This software includes the following improvements:
 - Add a new dimension to the array_points, a wall label
 - The array_parameter is computed only with half matrix 
 - Was created a general reports about channel impulse reponse.
+- Was modified the equation reflection using 4 angles instead of 3 angles
 
 """
 import numpy as np
@@ -28,6 +29,7 @@ import timeit
 
 from numpy.core.function_base import linspace
 
+from scipy.fft import rfft, rfftfreq
 
 c = 3e8 #speed of light in [m/s]
 no_walls = 6
@@ -110,7 +112,7 @@ def tessellation(x_lim,y_lim,z_lim,scale_factor):
     #delta_A = 3.6e-3
     
     #DeltaA defined to fulfill deltaA << (root(2)/2)*deltaL --> the maximun lenght on delta_A must be 10 times less than distane between points 
-    delta_A = (delta_L**2)/800
+    delta_A = (delta_L**2)/200
 
     print("Scale factor for Delta L is: ", scale_factor)
     print("DeltaL[m]: ", delta_L)
@@ -238,7 +240,7 @@ def make_parameters(array_points,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick):
 # x_lim,y_lim,z_lim: limits in room dimmensions
 # a_r: sensitive area in photodetector
 # no_xtick,no_ytick,no_ztick: number of division in each axes.
-def h_t(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick,init_index,a_r,rho,delta_A,k_reflec):
+def compute_cir(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick,init_index,a_r,rho,delta_A,k_reflec):
     
     #tx_wall_power = np.zeros(3,2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick)
     #rx_wall_power = np.zeros(3,2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick)
@@ -285,12 +287,12 @@ def h_t(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,no_xtick,
     
     #Impulse response between source and each discretized wall
     h0_se[:,0] = np.multiply(area_factor*rho*delta_A*tx_power,parameters[1,:,int(tx_index_point)])
-    h0_er[:,0] = np.divide(rx_wall_factor,dis2[rx_index_point,:],out=np.zeros((no_cells)), where=dis2[rx_index_point,:]!=0)
+    h0_er[:,0] = np.divide(np.multiply(parameters[1,:,int(rx_index_point)],rx_wall_factor),np.pi*dis2[rx_index_point,:],out=np.zeros((no_cells)), where=dis2[rx_index_point,:]!=0)
     h0_se[:,1] = parameters[0,tx_index_point,:]/c
     h0_er[:,1] = parameters[0,rx_index_point,:]/c
 
     dP_ij = np.zeros((no_cells,no_cells),np.float32)
-    dP_ij = np.divide(rho*delta_A*parameters[1,:,:],dis2,out=np.zeros_like(dP_ij),where=dis2!=0) 
+    dP_ij = np.divide(rho*delta_A*parameters[1,:,:]*np.transpose(parameters[1,:,:]),np.pi*dis2,out=np.zeros_like(dP_ij),where=dis2!=0) 
     #dP_ij_1d = dP_ij.flatten()
     #numpy.savetxt("dPij.csv", dP_ij[:,0], delimiter=",")
     
@@ -350,17 +352,12 @@ def h_t(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,no_xtick,
                 h_k[i][lim_0:lim_1,0] = np.multiply([hlast_er[i][m,0] for m in range(l,len_last,no_cells)],h0_se[l,0])
                 h_k[i][lim_0:lim_1,1] = h0_se[l,1] + [hlast_er[i][m,1] for m in range(l,len_last,no_cells)]
 
-            print("//------------- h"+str(i)+"-computed ------------------//")            
-            numpy.savetxt(cir_path+"h"+str(i)+".csv", h_k[i], delimiter=",")      
-    
-      
+            print("//------------- h"+str(i)+"-computed ------------------//")      
+                 
     return h_k
 
-
-
 #Function to create an analysis of the simulation
-def create_report(h_k,k_reflec,no_cells):
-
+def create_histograms(h_k,k_reflec,no_cells):
     print("//------------- Data report ------------------//")
     print("Time resolution [s]:"+str(tres))
     print("Number of Bins:"+str(bins))
@@ -369,7 +366,8 @@ def create_report(h_k,k_reflec,no_cells):
     hk_aux = []
     
     delay_los = h_k[0][0,1]
-    power_data = np.zeros((bins,k_reflec+1))
+    hist_power_time = np.zeros((bins,k_reflec+1))
+    
 
 
     for i in range(k_reflec+1):            
@@ -390,52 +388,91 @@ def create_report(h_k,k_reflec,no_cells):
         hk_aux[i][:,1] = np.floor(hk_aux[i][:,1]/tres)
 
         for j in range(no_cells**i):
-           power_data[int(hk_aux[i][j,1]),i] += hk_aux[i][j,0]
+           hist_power_time[int(hk_aux[i][j,1]),i] += hk_aux[i][j,0]
 
                 
-        time_scale = linspace(0,bins*tres,num=bins)
+        time_scale = linspace(0,bins*tres,num=bins)        
 
+    
+    print("Total-Response:")
+    print("Total-Power[W]:"+str(sum(h_power)))  
+    
+    total_ht = np.sum(hist_power_time,axis=1)
+
+
+
+    return hist_power_time,total_ht,time_scale
+
+
+def compute_freq(hist_power_time,k_reflec):
+
+    hist_power_freq = np.zeros((int(bins/2)+1,k_reflec+1))
+    xf = rfftfreq(bins, tres)
+
+    for i in range(k_reflec+1):            
+        hist_power_freq[:,i] = np.abs(rfft(hist_power_time[:,i]))       
+
+    #plt.plot(xf, np.abs(yf))
+    #plt.show()
+
+    return hist_power_freq,xf
+
+
+def create_hfiles(h_k,k_reflec):
+
+    for i in range(k_reflec+1):
+        numpy.savetxt(cir_path+"h"+str(i)+".csv", h_k[i], delimiter=",") 
+    
+    return 0
+
+
+def create_histfiles(hist_power_time,time_scale,k_reflec,hfreq,freq):
+
+    print("//--- creating-histograms-files-csv-graphs ---//")            
+
+    for i in range(k_reflec+1):
         fig, (vax) = plt.subplots(1, 1, figsize=(12, 6))
-        vax.plot(time_scale,power_data[:,i], 'o',markersize=2)
-        vax.vlines(time_scale, [0], power_data[:,i],linewidth=1)
+        vax.plot(time_scale,hist_power_time[:,i], 'o',markersize=2)
+        vax.vlines(time_scale, [0], hist_power_time[:,i],linewidth=1)
 
         vax.set_xlabel("time(s) \n Time resolution:"+str(tres)+"s  Bins:"+str(bins),fontsize=15)
         vax.set_ylabel('Power(W)',fontsize=15)
         vax.set_title("Channel Impulse Response h"+str(i)+"(t)",fontsize=20)
 
         vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
+        
+        numpy.savetxt(report_path+"h"+str(i)+"-histogram.csv", np.transpose([hist_power_time[:,i],time_scale.T]), delimiter=",") 
 
-        print("//-------- h"+str(i)+"-histogram-saved -------------//")            
-        numpy.savetxt(report_path+"h"+str(i)+"-histogram.csv", np.transpose([power_data[:,i],time_scale.T]), delimiter=",") 
+        fig.savefig(report_path+"h"+str(i)+".png")        
+        plt.show()
 
-        fig.savefig(report_path+"h"+str(i)+".png")
-        print("Graph created and saved in directory.")
+    numpy.savetxt(report_path+"total-histogram.csv", np.transpose([np.sum(hist_power_time,axis=1),time_scale.T]), delimiter=",") 
+
+    
+    for i in range(k_reflec+1):
+        fig, (vax) = plt.subplots(1, 1, figsize=(12, 6))
+        vax.plot(freq, hfreq[:,i],'o',markersize=2)
+        vax.vlines(freq, [0], hfreq[:,i],linewidth=1)
+
+        vax.set_xlabel("Freq(Hz) \n Time resolution:"+str(tres)+"s  Bins:"+str(bins),fontsize=15)
+        vax.set_ylabel('Power(W)',fontsize=15)
+        vax.set_title("Frequency CIR h"+str(i),fontsize=20)
+
+        vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
+        
+        numpy.savetxt(report_path+"h"+str(i)+"-freq-histogram.csv", [hfreq[:,i],freq], delimiter=",") 
+
+        fig.savefig(report_path+"h"+str(i)+"freq.png")        
         plt.show()
 
     
-    print("Total-Response:")
-    print("Total-Power[W]:"+str(sum(h_power)))    
-    print("//---------- total-histogram-saved -------------//")            
-    numpy.savetxt(report_path+"total-histogram.csv", np.transpose([np.sum(power_data,axis=1),time_scale.T]), delimiter=",") 
+    print("Graphs and CSV created and saved in directory.")
 
-    fig, (vax) = plt.subplots(1, 1, figsize=(12, 6))
-    vax.plot(time_scale,np.sum(power_data,axis=1), 'o',markersize=2)
-    vax.vlines(time_scale, [0], np.sum(power_data,axis=1),linewidth=1)
-
-    vax.set_xlabel("time(s) \n Time resolution:"+str(tres)+"s  Bins:"+str(bins),fontsize=15)
-    vax.set_ylabel('Power(W)',fontsize=15)
-    vax.set_title("Total Channel Impulse Response",fontsize=20)
-
-    vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
-
-    fig.savefig(report_path+"total-histogram.png")
-    print("Graph created and saved in directory.")
-    plt.show()
-    
-    
     return 0
 
-####### define input parameters for channel model ###########
+
+
+#define input parameters for channel model
 #source = {tx_pos,txnormal_vector,lambert_num,power[W]}
 #tx_pos: [pos_x,pos_y,pos_z]
 #txnormal_vector: [pos_x,pos_y,pos_z]
@@ -446,19 +483,24 @@ r = [[1,1,0],[0,0,1],1e-4,1]
 
 #envirorment e = {reflectance,scale_factor,size_room,k_reflections}
 #size_room: [x_lim,y_lim,z_lim]
-e = [0.8,1/5,[2,2,2],3]    
+e = [0.8,1/11,[2,2,2],3]    
 
 starttime = timeit.default_timer()
 #print("The start time is :",starttime)
 
-a = tessellation(e[2][0],e[2][1],e[2][2],e[1])
-b = make_parameters(a[0],e[2][0],e[2][1],e[2][2],a[1],a[2],a[3])
-c = h_t(s[2],s[0],r[0],a[0][0:3,:],a[0][3,:],b,e[2][0],e[2][1],e[2][2],a[1],a[2],a[3],a[4],r[2],e[0],a[5],e[3])
-create_report(c,e[3],a[6])
+array_points,no_xtick,no_ytick,no_ztick,init_index,delta_A,no_points = tessellation(e[2][0],e[2][1],e[2][2],e[1])
+ew_par = make_parameters(array_points,e[2][0],e[2][1],e[2][2],no_xtick,no_ytick,no_ztick)
+h_k = compute_cir(s[2],s[0],r[0],array_points[0:3,:],array_points[3,:],ew_par,e[2][0],e[2][1],e[2][2],no_xtick,no_ytick,no_ztick,init_index,r[2],e[0],delta_A,e[3])
+hist_power_time,total_ht,time_scale = create_histograms(h_k,e[3],no_points)
+#hfreq,freq = compute_freq(hist_power_time,e[3])
+
+#create_hfiles(h_k,e[3])
+#create_histfiles(hist_power_time,time_scale,e[3],hfreq,freq)
 
 print("The execution time is :", timeit.default_timer() - starttime)
+print("Simulation finished.")
 
-#print(a[6].shape)
+#print(no_points.shape)
 #print(a[8])
 
 #led_pattern(s[2])
