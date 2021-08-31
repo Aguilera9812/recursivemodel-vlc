@@ -16,6 +16,8 @@ import numpy
 import math
 import os
 
+# annotating a variable with a type-hint
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as axes3d
@@ -31,22 +33,31 @@ from numpy.core.function_base import linspace
 
 from scipy.fft import rfft, rfftfreq
 
-c = 3e8 #speed of light in [m/s]
+#constant data for modeling
+#speed of light in [m/s]
+c = 3e8 
 no_walls = 6
-tres = 0.2e-9 # time resolution
-bins = 300 # bins for power graph 
-
+# time resolution
+tres = 0.2e-9 
+# bins for power graph 
+bins = 300 
 #Array with normal vectors for each wall.
 ew_n = [[0,0,-1],[0,1,0],[1,0,0],[0,-1,0],[-1,0,0],[0,0,1]]
 
+#directory to save hfiles and histogram report
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-
 cir_path = ROOT_DIR + "/cir/"
 report_path = ROOT_DIR + "/report/"
 
 
 #Function to calculate angls between two vector position
-def cos_2points(v1,n1,v2,n2):
+def cos_2points(
+    v1: List[float],
+    n1: List[int],
+    v2: List[float],
+    n2: List[int]
+    ) -> Tuple[float,float]:
+
     unit_vlos = (v1-v2) / np.linalg.norm(v1-v2)
 
     cos_phi = np.dot(-1*unit_vlos, n1)
@@ -55,7 +66,11 @@ def cos_2points(v1,n1,v2,n2):
     #print([angle1,angle2])    
     return cos_phi,cos_tetha
 
-def led_pattern(m):
+#Function to show the radiation pattern of LED used. 
+#m: Labert number
+def led_pattern(m: float) -> None:
+    """Function to create a 3d radiation pattern of the LED source."""
+
     theta, phi = np.linspace(0, 2 * np.pi, 40), np.linspace(0,np.pi/2, 40)
     THETA, PHI = np.meshgrid(theta, phi)
     R = (m+1)/(2*np.pi)*np.cos(PHI)**m
@@ -71,12 +86,37 @@ def led_pattern(m):
     plt.show()
     return 0
 
-#Function to calculate the points in each wall from room size specifications.
-#x_lim: lenght in x axe.2
-#y_lim: lenght in y axe.
-#z_lim: lenght in z axe.
-# returns 2d-array (3xNc) with [X,Y,Z] coordinates of each points.
-def tessellation(x_lim,y_lim,z_lim,scale_factor):
+
+def tessellation(
+    x_lim: float,
+    y_lim: float,
+    z_lim: float,
+    scale_factor:float
+    ) -> Tuple[List[float], int, int, int, int, float, int]:
+    """Function to calculate the coordinates [x,y,z] of every points.
+    
+    It assumes a rectangular room and each of ones of walls are splitted in small 
+    square cells. The centroid of each small cell represent a point coordinates 
+    that will return. Is also returned the number of points and the number of 
+    division in each axe. Using a scale factor is possible modify the number of 
+    cells used in the model.
+
+    Paramteres:
+        x_lim: lenght of rectangular room in x-axe
+        y_lim: lenght of rectangular room in y-axe
+        z_lim: lenght of rectangular room in z-axe 
+        scale_factor: scale factor
+
+    Returns: A tuple with the follow parameters:
+        array_points = 2d-array (3xNc) with [X,Y,Z] coordinates of each points.
+        no_xtick,no_ytick,no_ztick: Number of divisions in each axe.
+        init_index: 1d-array with start index for each wall inside of array_points.
+        delta_A: cell area in the model
+        no_points: number of points (or cells) in the model 
+    
+    """
+
+
     print("//****** Tessellation *******//")
     x_num = fractions.Fraction(str(x_lim)).numerator
     x_den = fractions.Fraction(str(x_lim)).denominator
@@ -192,11 +232,53 @@ def tessellation(x_lim,y_lim,z_lim,scale_factor):
     #print(ew5_points)
     return [np.concatenate((ew0_points,ew1_points,ew2_points,ew3_points,ew4_points,ew5_points),axis=1),no_xtick,no_ytick,no_ztick,init_index,delta_A,no_points]
 
-def lcm(a, b,c):
-    return abs(a*b*c) // math.gcd(c,math.gcd(a, b))
+#MCM
+def lcm(num1: float, num2: float,num3: float) -> float: 
+    return abs(num1*num2*num3) // math.gcd(num3,math.gcd(num1, num2))
 
-#Function to create a cross parameters between points.
-def make_parameters(array_points,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick):
+
+def make_parameters(
+    array_points: List[float],
+    x_lim: float,
+    y_lim: float,
+    z_lim: float,
+    no_xtick: int,
+    no_ytick: int,
+    no_ztick: int
+    )-> List[float]:
+
+    """This function creates an 3d-array with cross-parametes between points. 
+    
+    This parameters are the distance between points and the cosine of the angles 
+    respect to the normal vector. Using this array is commputed the channel immpulse 
+    response.
+    
+    Parameters:
+        array_points: 2d-array with [x,y,z] coordinates for each point. 
+        x_lim: lenght of rectangular room in x-axe
+        y_lim: lenght of rectangular room in y-axe
+        z_lim: lenght of rectangular room in z-axe 
+        no_xtick: number of division in x-axe 
+        no_ytick: number of division in y-axe 
+        no_ztick: number of division in z-axe 
+
+    Returns: Returns a 3d-array with distance and cos(tetha) parameters. The 
+    shape of this array is [2,no_points,no_points].
+    
+    
+        _____________________    
+       /                    /|
+      /                    / |
+     /                    /  |
+    /____________________/  /| 
+    |     Distance       | / |
+    |____________________|/ /
+    |     Cos(tetha)     | /
+    |____________________|/
+    
+
+    """
+
 
     no_points = 2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick
     ew_par = np.zeros((2,no_points,no_points),dtype=np.float16)    
@@ -230,23 +312,50 @@ def make_parameters(array_points,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick):
 
     return ew_par
 
-#Function to compute the channel impulse respone
-# Inputs arguments:
-# m: lambertian number to tx emission
-# tx_pos: 1d-array with [x,y,z] tx position
-# rx_pos: 1d-array with [x,y,z] rx position
-# points: List with [x,y,z] cooridinates for every point in each wall
-# parameters: List with angle and distance between all points.  
-# x_lim,y_lim,z_lim: limits in room dimmensions
-# a_r: sensitive area in photodetector
-# no_xtick,no_ytick,no_ztick: number of division in each axes.
-def compute_cir(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,no_xtick,no_ytick,no_ztick,init_index,a_r,rho,delta_A,k_reflec):
-    
-    #tx_wall_power = np.zeros(3,2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick)
-    #rx_wall_power = np.zeros(3,2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick)
 
+def compute_cir(
+    m: float,
+    tx_pos: List[float],
+    rx_pos: List[float],
+    points: List[float],
+    wall_label: List[float],
+    parameters: List[float],
+    x_lim: float,
+    y_lim: float,
+    z_lim: float,
+    no_xtick: float,
+    no_ytick: float,
+    no_ztick: float,
+    init_index: float,
+    a_r: float,
+    rho: float,
+    delta_A: float,
+    k_reflec: float
+    ) -> List[float]:
+    
+    """ Function to compute the channel impulse response for each reflection. 
+    
+    Parameters:
+        m: lambertian number to tx emission
+        tx_pos: 1d-array with [x,y,z] tx position
+        rx_pos: 1d-array with [x,y,z] rx position
+        points: List with [x,y,z] cooridinates for every point in each wall
+        parameters: List with angle and distance between all points.  
+        x_lim,y_lim,z_lim: limits in room dimmensions
+        a_r: sensitive area in photodetector
+        no_xtick,no_ytick,no_ztick: number of division in each axes.
+
+    Returns: A list with 2d-array [power_ray,time_delay] collection for each 
+    refletion [h_0,h_1,...,h_k].
+
+
+    """
+
+    
+    #compute the total number of points (cells)
     no_cells = len(points[0,:])
 
+    #area factor
     area_factor = (2*x_lim*y_lim + 2*x_lim*z_lim + 2*y_lim*z_lim)/(delta_A*no_cells)
 
     #define the wall of the tx_pos
@@ -285,11 +394,15 @@ def compute_cir(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,n
     h0_er = np.zeros((no_cells,2),dtype=np.float32)
 
     
-    #Impulse response between source and each discretized wall
+    #Impulse response between source and each cells 
     h0_se[:,0] = np.multiply(area_factor*rho*delta_A*tx_power,parameters[1,:,int(tx_index_point)])
+    #Impulse response between receiver and each cells 
     h0_er[:,0] = np.divide(np.multiply(parameters[1,:,int(rx_index_point)],rx_wall_factor),np.pi*dis2[rx_index_point,:],out=np.zeros((no_cells)), where=dis2[rx_index_point,:]!=0)
+    #Time delay between source and each cells 
     h0_se[:,1] = parameters[0,tx_index_point,:]/c
+    #Time delay between receiver and each cells 
     h0_er[:,1] = parameters[0,rx_index_point,:]/c
+
 
     dP_ij = np.zeros((no_cells,no_cells),np.float32)
     dP_ij = np.divide(rho*delta_A*parameters[1,:,:]*np.transpose(parameters[1,:,:]),np.pi*dis2,out=np.zeros_like(dP_ij),where=dis2!=0) 
@@ -356,8 +469,29 @@ def compute_cir(m,tx_pos,rx_pos,points,wall_label,parameters,x_lim,y_lim,z_lim,n
                  
     return h_k
 
-#Function to create an analysis of the simulation
-def create_histograms(h_k,k_reflec,no_cells):
+#
+def create_histograms(
+    h_k: List[float],
+    k_reflec: int,
+    no_cells: int
+    ) -> Tuple[List[float],List[float],List[float]]:
+    """Function to create histograms from channel impulse response raw data. 
+    
+    The channel impulse response raw data is a list with power and time delay 
+    of each ray. The histogram are created based on time resolution. 
+
+    Parameters:
+        h_k: list with channel impulse response [h_0,h_1,...,h_k]. 
+        k_reflec: number of reflections
+        no_cells: number of points of model
+
+    Returns: A List with the next parameters
+        hist_power_time: Power histograms for each reflection
+        total_ht: total power CIR histrogram 
+        time_scale: 1d-array with time scale
+
+    """
+        
     print("//------------- Data report ------------------//")
     print("Time resolution [s]:"+str(tres))
     print("Number of Bins:"+str(bins))
@@ -400,11 +534,23 @@ def create_histograms(h_k,k_reflec,no_cells):
     total_ht = np.sum(hist_power_time,axis=1)
 
 
-
     return hist_power_time,total_ht,time_scale
 
 
-def compute_freq(hist_power_time,k_reflec):
+def compute_freq(
+    hist_power_time: List[float],
+    k_reflec: float
+    ) -> Tuple[List[float],List[float]]:
+    """Function to compute the frequency domain represenation of h(t)
+    
+    Parameters:
+        hist_power_time: power histograms for each reflection
+        k_reflec: number of reflections
+
+    Returns:
+        hist_power_freq: frequency representation of power histrograms
+        xf: frequency scale
+    """
 
     hist_power_freq = np.zeros((int(bins/2)+1,k_reflec+1))
     xf = rfftfreq(bins, tres)
@@ -418,16 +564,27 @@ def compute_freq(hist_power_time,k_reflec):
     return hist_power_freq,xf
 
 
-def create_hfiles(h_k,k_reflec):
+def create_hfiles(
+    h_k: List[float],
+    k_reflec: float
+    ) -> None:
+    """Function to create .csv of h(t) raw files channel impulse response."""
 
     for i in range(k_reflec+1):
         numpy.savetxt(cir_path+"h"+str(i)+".csv", h_k[i], delimiter=",") 
     
     return 0
 
-
-def create_histfiles(hist_power_time,time_scale,k_reflec,hfreq,freq):
-
+#Function to create .csv files and graphs of power histograms 
+def create_histfiles(
+    hist_power_time: List[float],
+    time_scale: List[float],
+    k_reflec: float,
+    hfreq: List[float],
+    freq: List[float]
+    ) -> None:
+    """Function to create .csv and graphs of h(t) histogram channel impulse response."""
+    
     print("//--- creating-histograms-files-csv-graphs ---//")            
 
     for i in range(k_reflec+1):
@@ -471,36 +628,37 @@ def create_histfiles(hist_power_time,time_scale,k_reflec,hfreq,freq):
     return 0
 
 
+if __name__ == "__main__":
+    #define input parameters for channel model
+    #source = {tx_pos,txnormal_vector,lambert_num,power[W]}
+    #tx_pos: [pos_x,pos_y,pos_z]
+    #txnormal_vector: [pos_x,pos_y,pos_z]
+    s = [[1,1,2],[0,0,-1],1,1]
 
-#define input parameters for channel model
-#source = {tx_pos,txnormal_vector,lambert_num,power[W]}
-#tx_pos: [pos_x,pos_y,pos_z]
-#txnormal_vector: [pos_x,pos_y,pos_z]
-s = [[1,1,2],[0,0,-1],1,1]
+    #receiver = {rx_pos,rxnormal_vector,area_receiver[m^2],FOV}
+    r = [[1,1,0],[0,0,1],1e-4,1]
 
-#receiver = {rx_pos,rxnormal_vector,area_receiver[m^2],FOV}
-r = [[1,1,0],[0,0,1],1e-4,1]
+    #envirorment e = {reflectance,scale_factor,size_room,k_reflections}
+    #size_room: [x_lim,y_lim,z_lim]
+    e = [0.8,1/201,[2,2,2],3]    
 
-#envirorment e = {reflectance,scale_factor,size_room,k_reflections}
-#size_room: [x_lim,y_lim,z_lim]
-e = [0.8,1/11,[2,2,2],3]    
+    starttime = timeit.default_timer()
+    #print("The start time is :",starttime)
 
-starttime = timeit.default_timer()
-#print("The start time is :",starttime)
+    array_points,no_xtick,no_ytick,no_ztick,init_index,delta_A,no_points = tessellation(e[2][0],e[2][1],e[2][2],e[1])
+    #ew_par = make_parameters(array_points,e[2][0],e[2][1],e[2][2],no_xtick,no_ytick,no_ztick)
+    #h_k = compute_cir(s[2],s[0],r[0],array_points[0:3,:],array_points[3,:],ew_par,e[2][0],e[2][1],e[2][2],no_xtick,no_ytick,no_ztick,init_index,r[2],e[0],delta_A,e[3])
+    #hist_power_time,total_ht,time_scale = create_histograms(h_k,e[3],no_points)
+    #hfreq,freq = compute_freq(hist_power_time,e[3])
 
-array_points,no_xtick,no_ytick,no_ztick,init_index,delta_A,no_points = tessellation(e[2][0],e[2][1],e[2][2],e[1])
-ew_par = make_parameters(array_points,e[2][0],e[2][1],e[2][2],no_xtick,no_ytick,no_ztick)
-h_k = compute_cir(s[2],s[0],r[0],array_points[0:3,:],array_points[3,:],ew_par,e[2][0],e[2][1],e[2][2],no_xtick,no_ytick,no_ztick,init_index,r[2],e[0],delta_A,e[3])
-hist_power_time,total_ht,time_scale = create_histograms(h_k,e[3],no_points)
-#hfreq,freq = compute_freq(hist_power_time,e[3])
+    
+    #create_hfiles(h_k,e[3])
+    #create_histfiles(hist_power_time,time_scale,e[3],hfreq,freq)
 
-#create_hfiles(h_k,e[3])
-#create_histfiles(hist_power_time,time_scale,e[3],hfreq,freq)
+    print("The execution time is :", timeit.default_timer() - starttime)
+    print("Simulation finished.")
 
-print("The execution time is :", timeit.default_timer() - starttime)
-print("Simulation finished.")
+    #print(no_points.shape)
+    #print(a[8])
 
-#print(no_points.shape)
-#print(a[8])
-
-#led_pattern(s[2])
+    #led_pattern(s[2])
