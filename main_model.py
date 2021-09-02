@@ -33,21 +33,22 @@ from numpy.core.function_base import linspace
 
 from scipy.fft import rfft, rfftfreq
 
-#constant data for modeling
-#speed of light in [m/s]
-c = 3e8 
-no_walls = 6
-# time resolution
-tres = 0.2e-9 
-# bins for power graph 
-bins = 300 
-#Array with normal vectors for each wall.
-ew_n = [[0,0,-1],[0,1,0],[1,0,0],[0,-1,0],[-1,0,0],[0,0,1]]
+# global variables
 
-#directory to save hfiles and histogram report
+#speed of light in [m/s]
+SPEED_OF_LIGHT = 3e8 
+# time resolution for histogram
+TIME_RESOLUTION = 0.2e-9 
+# bins for power graph histogram
+BINS_HIST = 300 
+#Array with normal vectors for each wall.
+NORMAL_VECTOR_WALL = [[0,0,-1],[0,1,0],[1,0,0],[0,-1,0],[-1,0,0],[0,0,1]]
+#directory root of the project
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-cir_path = ROOT_DIR + "/cir/"
-report_path = ROOT_DIR + "/report/"
+#directory to save channel impulse response raw data
+CIR_PATH = ROOT_DIR + "/cir/"
+#directory to save histograms and graphs  
+REPORT_PATH = ROOT_DIR + "/report/"
 
 
 #Function to calculate angls between two vector position
@@ -66,10 +67,20 @@ def cos_2points(
     #print([angle1,angle2])    
     return cos_phi,cos_tetha
 
-#Function to show the radiation pattern of LED used. 
-#m: Labert number
+
+
 def led_pattern(m: float) -> None:
-    """Function to create a 3d radiation pattern of the LED source."""
+    """Function to create a 3d radiation pattern of the LED source.
+    
+    The LED for recurse channel model is assumed as lambertian radiator. The number of lambert 
+    defines the directivity of the light source.
+        
+    Parameters:
+        m: Lambert number
+    
+    Returns: None.
+        
+    """
 
     theta, phi = np.linspace(0, 2 * np.pi, 40), np.linspace(0,np.pi/2, 40)
     THETA, PHI = np.meshgrid(theta, phi)
@@ -96,8 +107,8 @@ def tessellation(
     """Function to calculate the coordinates [x,y,z] of every points.
     
     It assumes a rectangular room and each of ones of walls are splitted in small 
-    square cells. The centroid of each small cell represent a point coordinates 
-    that will return. Is also returned the number of points and the number of 
+    square cells. The centroid of each small cell represents a point coordinates 
+    that will be returned. Is also returned the number of points and the number of 
     division in each axe. Using a scale factor is possible modify the number of 
     cells used in the model.
 
@@ -278,8 +289,6 @@ def make_parameters(
     
 
     """
-
-
     no_points = 2*no_xtick*no_ytick + 2*no_ztick*no_xtick + 2*no_ztick*no_ytick
     ew_par = np.zeros((2,no_points,no_points),dtype=np.float16)    
 
@@ -300,8 +309,8 @@ def make_parameters(
                 ew_par[0,ini_point,end_point] = fastdist.euclidean(array_points[0:3,ini_point],array_points[0:3,end_point])                 
                 ew_par[0,end_point,ini_point]  = ew_par[0,ini_point,end_point]
 
-                ew_par[1,ini_point,end_point],ew_par[1,end_point,ini_point] = cos_2points(array_points[0:3,ini_point],ew_n[wallinit],
-                array_points[0:3,end_point],ew_n[wallend])
+                ew_par[1,ini_point,end_point],ew_par[1,end_point,ini_point] = cos_2points(array_points[0:3,ini_point],NORMAL_VECTOR_WALL[wallinit],
+                array_points[0:3,end_point],NORMAL_VECTOR_WALL[wallend])
                 
    
 
@@ -331,8 +340,7 @@ def compute_cir(
     rho: float,
     delta_A: float,
     k_reflec: float
-    ) -> List[float]:
-    
+    ) -> List[float]:    
     """ Function to compute the channel impulse response for each reflection. 
     
     Parameters:
@@ -399,9 +407,9 @@ def compute_cir(
     #Impulse response between receiver and each cells 
     h0_er[:,0] = np.divide(np.multiply(parameters[1,:,int(rx_index_point)],rx_wall_factor),np.pi*dis2[rx_index_point,:],out=np.zeros((no_cells)), where=dis2[rx_index_point,:]!=0)
     #Time delay between source and each cells 
-    h0_se[:,1] = parameters[0,tx_index_point,:]/c
+    h0_se[:,1] = parameters[0,tx_index_point,:]/SPEED_OF_LIGHT
     #Time delay between receiver and each cells 
-    h0_er[:,1] = parameters[0,rx_index_point,:]/c
+    h0_er[:,1] = parameters[0,rx_index_point,:]/SPEED_OF_LIGHT
 
 
     dP_ij = np.zeros((no_cells,no_cells),np.float32)
@@ -421,10 +429,10 @@ def compute_cir(
         if i == 0:           
 
             h_k[i][0,0] = tx_power[int(rx_index_point)]*rx_wall_factor[int(tx_index_point)]
-            h_k[i][0,1] = parameters[0,int(tx_index_point),int(rx_index_point)]/c
+            h_k[i][0,1] = parameters[0,int(tx_index_point),int(rx_index_point)]/SPEED_OF_LIGHT
 
             print("//------------- h0-computed ------------------//")            
-            numpy.savetxt(cir_path+"h0.csv", h_k[i], delimiter=",")
+            numpy.savetxt(CIR_PATH+"h0.csv", h_k[i], delimiter=",")
 
         elif i==1:
             hlast_er[i][:,0] = h0_er[:,0]     
@@ -434,7 +442,7 @@ def compute_cir(
             h_k[i][:,1] = h0_se[:,1] + h0_er[:,1]
 
             print("//------------- h1-computed ------------------//")
-            numpy.savetxt(cir_path+"h1.csv", h_k[i], delimiter=",")
+            numpy.savetxt(CIR_PATH+"h1.csv", h_k[i], delimiter=",")
             
 
         else:
@@ -446,7 +454,7 @@ def compute_cir(
                 index_dpij = int(j%no_cells)
                 
                 hlast_er[i][no_cells*j:int(no_cells*(j+1)),0] = hlast_er[i-1][j,0]*dP_ij[index_dpij,:]
-                hlast_er[i][no_cells*j:int(no_cells*(j+1)),1] = hlast_er[i-1][j,1] + parameters[0,index_dpij,:]/c                
+                hlast_er[i][no_cells*j:int(no_cells*(j+1)),1] = hlast_er[i-1][j,1] + parameters[0,index_dpij,:]/SPEED_OF_LIGHT                
 
             len_last = len(hlast_er[i][:,0])
 
@@ -493,14 +501,14 @@ def create_histograms(
     """
         
     print("//------------- Data report ------------------//")
-    print("Time resolution [s]:"+str(tres))
-    print("Number of Bins:"+str(bins))
+    print("Time resolution [s]:"+str(TIME_RESOLUTION))
+    print("Number of Bins:"+str(BINS_HIST))
     h_power = np.zeros((k_reflec+1))
 
     hk_aux = []
     
     delay_los = h_k[0][0,1]
-    hist_power_time = np.zeros((bins,k_reflec+1))
+    hist_power_time = np.zeros((BINS_HIST,k_reflec+1))
     
 
 
@@ -519,13 +527,13 @@ def create_histograms(
                
         hk_aux[i] = h_k[i]
         hk_aux[i][:,1] = hk_aux[i][:,1] - delay_los
-        hk_aux[i][:,1] = np.floor(hk_aux[i][:,1]/tres)
+        hk_aux[i][:,1] = np.floor(hk_aux[i][:,1]/TIME_RESOLUTION)
 
         for j in range(no_cells**i):
            hist_power_time[int(hk_aux[i][j,1]),i] += hk_aux[i][j,0]
 
                 
-        time_scale = linspace(0,bins*tres,num=bins)        
+        time_scale = linspace(0,BINS_HIST*TIME_RESOLUTION,num=BINS_HIST)        
 
     
     print("Total-Response:")
@@ -552,8 +560,8 @@ def compute_freq(
         xf: frequency scale
     """
 
-    hist_power_freq = np.zeros((int(bins/2)+1,k_reflec+1))
-    xf = rfftfreq(bins, tres)
+    hist_power_freq = np.zeros((int(BINS_HIST/2)+1,k_reflec+1))
+    xf = rfftfreq(BINS_HIST, TIME_RESOLUTION)
 
     for i in range(k_reflec+1):            
         hist_power_freq[:,i] = np.abs(rfft(hist_power_time[:,i]))       
@@ -571,7 +579,7 @@ def create_hfiles(
     """Function to create .csv of h(t) raw files channel impulse response."""
 
     for i in range(k_reflec+1):
-        numpy.savetxt(cir_path+"h"+str(i)+".csv", h_k[i], delimiter=",") 
+        numpy.savetxt(CIR_PATH+"h"+str(i)+".csv", h_k[i], delimiter=",") 
     
     return 0
 
@@ -592,18 +600,18 @@ def create_histfiles(
         vax.plot(time_scale,hist_power_time[:,i], 'o',markersize=2)
         vax.vlines(time_scale, [0], hist_power_time[:,i],linewidth=1)
 
-        vax.set_xlabel("time(s) \n Time resolution:"+str(tres)+"s  Bins:"+str(bins),fontsize=15)
+        vax.set_xlabel("time(s) \n Time resolution:"+str(TIME_RESOLUTION)+"s  Bins:"+str(BINS_HIST),fontsize=15)
         vax.set_ylabel('Power(W)',fontsize=15)
         vax.set_title("Channel Impulse Response h"+str(i)+"(t)",fontsize=20)
 
         vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
         
-        numpy.savetxt(report_path+"h"+str(i)+"-histogram.csv", np.transpose([hist_power_time[:,i],time_scale.T]), delimiter=",") 
+        numpy.savetxt(REPORT_PATH+"h"+str(i)+"-histogram.csv", np.transpose([hist_power_time[:,i],time_scale.T]), delimiter=",") 
 
-        fig.savefig(report_path+"h"+str(i)+".png")        
+        fig.savefig(REPORT_PATH+"h"+str(i)+".png")        
         plt.show()
 
-    numpy.savetxt(report_path+"total-histogram.csv", np.transpose([np.sum(hist_power_time,axis=1),time_scale.T]), delimiter=",") 
+    numpy.savetxt(REPORT_PATH+"total-histogram.csv", np.transpose([np.sum(hist_power_time,axis=1),time_scale.T]), delimiter=",") 
 
     
     for i in range(k_reflec+1):
@@ -611,15 +619,15 @@ def create_histfiles(
         vax.plot(freq, hfreq[:,i],'o',markersize=2)
         vax.vlines(freq, [0], hfreq[:,i],linewidth=1)
 
-        vax.set_xlabel("Freq(Hz) \n Time resolution:"+str(tres)+"s  Bins:"+str(bins),fontsize=15)
+        vax.set_xlabel("Freq(Hz) \n Time resolution:"+str(TIME_RESOLUTION)+"s  Bins:"+str(BINS_HIST),fontsize=15)
         vax.set_ylabel('Power(W)',fontsize=15)
         vax.set_title("Frequency CIR h"+str(i),fontsize=20)
 
         vax.grid(color = 'black', linestyle = '--', linewidth = 0.5)
         
-        numpy.savetxt(report_path+"h"+str(i)+"-freq-histogram.csv", [hfreq[:,i],freq], delimiter=",") 
+        numpy.savetxt(REPORT_PATH+"h"+str(i)+"-freq-histogram.csv", [hfreq[:,i],freq], delimiter=",") 
 
-        fig.savefig(report_path+"h"+str(i)+"freq.png")        
+        fig.savefig(REPORT_PATH+"h"+str(i)+"freq.png")        
         plt.show()
 
     
